@@ -24,7 +24,15 @@
 - MediaPipe Hand Landmarker：实时识别双手 21 个关键点，在浏览器本地运行，画面不上传
 - 手势分类基于 3D 世界坐标，指尖轨迹用 One Euro 滤波去抖
 - 音效全部由 WebAudio 实时合成
-- 单个 HTML 文件，无需构建
+- 单个 HTML 文件，无需构建；所有依赖都放在 `vendor/` 里，不依赖外部 CDN
+
+## 第三方文件
+
+`vendor/` 中的文件原样来自以下项目，各自遵循原许可证：
+
+- [three.js](https://github.com/mrdoob/three.js) r160（MIT，见 `vendor/three/LICENSE`）
+- [MediaPipe Tasks Vision](https://github.com/google-ai-edge/mediapipe) 0.10.14 及 Hand Landmarker 模型（Apache-2.0）
+- [Orbitron](https://fonts.google.com/specimen/Orbitron) 字体（SIL Open Font License 1.1）
 
 ## 本地运行
 
