@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arcana 手势法师</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cyan:#5ef2ff; --pink:#ff5fd8; --gold:#ffd166; --red:#ff4d5e; --violet:#a78bfa;
+  --bg:#05040d; --panel:rgba(14,12,34,.72); --line:rgba(255,255,255,.1);
+  --text:#e9ecff; --muted:#8d93b8;
+  --num:"Orbitron",-apple-system,"PingFang SC",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:-apple-system,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;user-select:none;-webkit-user-select:none}
+body.mouse-play{cursor:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hidden{display:none!important}
+
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none}
+.tl{position:absolute;top:20px;left:24px}
+#score{font:700 40px/1 var(--num);letter-spacing:.04em;text-shadow:0 0 18px rgba(94,242,255,.55)}
+#combo{font:700 15px/1 var(--num);color:var(--gold);margin-top:10px;opacity:0;transition:opacity .2s;text-shadow:0 0 12px rgba(255,209,102,.6)}
+#combo.on{opacity:1}
+#combo.bump{animation:bump .22s ease-out}
+@keyframes bump{0%{transform:scale(1.35)}100%{transform:scale(1)}}
+.tc{position:absolute;top:26px;left:50%;transform:translateX(-50%);font:600 13px var(--num);letter-spacing:.32em;color:var(--muted)}
+.tr{position:absolute;top:28px;right:28px;display:flex;gap:10px}
+.pip{width:13px;height:13px;transform:rotate(45deg);border:1.5px solid var(--cyan);background:var(--cyan);box-shadow:0 0 10px var(--cyan);transition:.3s}
+.pip.lost{background:transparent;border-color:#3a3f5c;box-shadow:none}
+.bl{position:absolute;left:24px;bottom:22px;width:min(340px,calc(100vw - 48px))}
+.ult-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;letter-spacing:.08em}
+.ult-label b{font:700 12px var(--num);color:var(--text);letter-spacing:.2em}
+.ult-bar{height:8px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+.ult-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--pink),var(--gold));transition:width .2s}
+.ult.ready .ult-bar i{animation:ready .6s infinite alternate}
+.ult.ready .ult-label span{color:var(--gold)}
+@keyframes ready{from{filter:brightness(1)}to{filter:brightness(1.8);box-shadow:0 0 16px var(--gold)}}
+#gestures{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.g{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:13px;opacity:.35;transition:opacity .2s,border-color .2s}
+.g.on{opacity:1;border-color:currentColor}
+.g .ic{font-size:16px;width:20px;text-align:center}
+.g .lb{color:var(--text);min-width:28px}
+.g .chg{width:44px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden}
+.g .chg i{display:block;height:100%;width:0;background:var(--gold)}
+#g0{color:var(--cyan)} #g1{color:var(--pink)}
+#handHint{position:absolute;left:50%;bottom:90px;transform:translateX(-50%);padding:10px 18px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:14px;color:var(--text);animation:breathe 1.6s infinite alternate}
+@keyframes breathe{from{opacity:.55}to{opacity:1}}
+
+#banner{position:fixed;top:30%;left:0;right:0;text-align:center;pointer-events:none;opacity:0;padding:0 16px}
+#banner h2{font:900 clamp(40px,8vw,88px)/1 var(--num);letter-spacing:.12em;background:linear-gradient(120deg,var(--cyan),var(--violet) 50%,var(--pink));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 22px rgba(167,139,250,.5))}
+#banner p{margin-top:16px;font-size:clamp(14px,2.2vw,19px);letter-spacing:.12em;color:var(--text)}
+#banner.show{animation:banner 2.8s ease forwards}
+@keyframes banner{0%{opacity:0;transform:scale(1.15)}10%{opacity:1;transform:scale(1)}78%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-12px)}}
+
+.pop{position:fixed;font:700 18px var(--num);pointer-events:none;white-space:nowrap;animation:pop .9s ease-out forwards;text-shadow:0 0 12px currentColor}
+@keyframes pop{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1;transform:translate(-50%,-60%) scale(1.15)}100%{opacity:0;transform:translate(-50%,-170%) scale(1)}}
+
+#vignette{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(255,30,60,.6))}
+#flash{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at center,#fff,#ffe9c2 40%,#ff9be8)}
+
+#preview{position:fixed;right:20px;bottom:20px;width:200px;aspect-ratio:4/3;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+#preview video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.5;display:block}
+#preview canvas{position:absolute;inset:0;width:100%;height:100%}
+#preview .tag{position:absolute;left:8px;top:6px;font-size:10px;color:var(--muted);letter-spacing:.1em}
+
+/* overlays */
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;
+  background:radial-gradient(ellipse at 50% 35%,rgba(48,22,110,.5),rgba(5,4,13,.9) 70%);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.inner{max-width:900px;width:100%;text-align:center;margin:auto}
+.title{font:900 clamp(52px,11vw,116px)/1 var(--num);letter-spacing:.14em;background:linear-gradient(120deg,var(--cyan),var(--violet) 45%,var(--pink));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 26px rgba(167,139,250,.45))}
+.sub{margin-top:12px;color:var(--muted);letter-spacing:.32em;font-size:14px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:38px 0 30px}
+@media (max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}}
+.card{padding:18px 16px;border-radius:14px;background:var(--panel);border:1px solid var(--line);text-align:left;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--c)}
+.card .ic{font-size:30px;line-height:1}
+.card h3{margin:12px 0 6px;font-size:15px;font-weight:600}
+.card p{font-size:12.5px;color:var(--muted);line-height:1.6}
+.btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+button{font:600 15px/1 inherit;font-family:inherit;padding:15px 28px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04);color:var(--text);cursor:pointer;transition:transform .15s,box-shadow .2s,background .2s}
+button:hover{transform:translateY(-1px);background:rgba(255,255,255,.08)}
+button.primary{background:linear-gradient(120deg,var(--cyan),var(--violet));color:#0a0820;border:none;box-shadow:0 0 32px rgba(94,242,255,.35)}
+button.primary:hover{box-shadow:0 0 44px rgba(94,242,255,.55)}
+.note{margin-top:20px;font-size:12px;color:var(--muted);line-height:1.8}
+kbd{font-family:var(--num);font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text)}
+.spinner{width:46px;height:46px;border-radius:50%;border:3px solid rgba(255,255,255,.1);border-top-color:var(--cyan);margin:0 auto 18px;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadMsg{font-size:15px;letter-spacing:.06em}
+#loadErr{margin-top:14px;color:var(--red);font-size:13px;line-height:1.7}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:34px auto 30px;max-width:640px}
+@media (max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{padding:16px 10px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
+.stat b{display:block;font:700 26px var(--num)}
+.stat span{font-size:12px;color:var(--muted)}
+#bestLine{font-size:13px;color:var(--gold);letter-spacing:.1em}
+#holdWrap{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:18px;font-size:13px;color:var(--muted)}
+#holdRing circle{transition:stroke-dashoffset .05s linear}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vignette"></div>
+<div id="flash"></div>
+
+<div id="hud" class="hidden">
+  <div class="tl"><div id="score">0</div><div id="combo">COMBO</div></div>
+  <div class="tc" id="waveLabel">WAVE 1</div>
+  <div class="tr" id="hp"></div>
+  <div class="bl">
+    <div class="ult" id="ult">
+      <div class="ult-label"><b>SUPERNOVA</b><span id="ultHint">击破晶体充能</span></div>
+      <div class="ult-bar"><i id="ultFill"></i></div>
+    </div>
+    <div id="gestures">
+      <div class="g" id="g0"><span class="ic">·</span><span class="lb">待机</span><span class="chg"><i></i></span></div>
+      <div class="g" id="g1"><span class="ic">·</span><span class="lb">待机</span><span class="chg"><i></i></span></div>
+    </div>
+  </div>
+  <div id="handHint" class="hidden">把手举到摄像头前</div>
+</div>
+<div id="banner"></div>
+<div id="pops"></div>
+<div id="preview" class="hidden"><video id="video" playsinline muted></video><canvas id="pv"></canvas><div class="tag">CAMERA · 本地识别</div></div>
+
+<section id="menu" class="overlay">
+  <div class="inner">
+    <div class="title">ARCANA</div>
+    <div class="sub">手势法师 · 用双手击碎来袭的晶体</div>
+    <div class="cards">
+      <div class="card" style="--c:var(--cyan)"><div class="ic">☝️</div><h3>挥手斩击</h3><p>快速挥动手指，指尖划过的晶体会被斩碎</p></div>
+      <div class="card" style="--c:var(--gold)"><div class="ic">✊</div><h3>蓄力冲击波</h3><p>握拳积蓄能量，张开手掌释放，蓄得越久范围越大</p></div>
+      <div class="card" style="--c:var(--pink)"><div class="ic">🤏</div><h3>念力投掷</h3><p>捏住一颗晶体，甩出去贯穿其他晶体，得分 ×1.5</p></div>
+      <div class="card" style="--c:var(--violet)"><div class="ic">👏</div><h3>超新星</h3><p>能量槽满后双手合掌，清空全场</p></div>
+    </div>
+    <div class="btns">
+      <button class="primary" id="btnCam">开启摄像头开始</button>
+      <button id="btnMouse">鼠标模式</button>
+    </div>
+    <div class="note">
+      摄像头画面只在本机浏览器里识别，不会上传。<br>
+      鼠标模式：快速划动 = 斩击 · 按住 <kbd>空格</kbd> 或右键蓄力，松开释放 · 按住左键抓取并甩出 · <kbd>Q</kbd> 超新星
+    </div>
+  </div>
+</section>
+
+<section id="loading" class="overlay hidden">
+  <div class="inner">
+    <div class="spinner" id="spin"></div>
+    <div id="loadMsg">正在请求摄像头…</div>
+    <div id="loadErr" class="hidden"></div>
+    <div class="btns hidden" id="loadBtns" style="margin-top:22px">
+      <button class="primary" id="btnFallback">改用鼠标模式</button>
+      <button id="btnBack">返回</button>
+    </div>
+  </div>
+</section>
+
+<section id="over" class="overlay hidden">
+  <div class="inner">
+    <div class="title" style="font-size:clamp(40px,8vw,80px)">CORE BREACHED</div>
+    <div class="sub">晶体突破了防线</div>
+    <div class="stats">
+      <div class="stat"><b id="sScore">0</b><span>分数</span></div>
+      <div class="stat"><b id="sWave">0</b><span>到达波次</span></div>
+      <div class="stat"><b id="sKills">0</b><span>击破</span></div>
+      <div class="stat"><b id="sCombo">0</b><span>最高连击</span></div>
+    </div>
+    <div id="bestLine"></div>
+    <div class="btns" style="margin-top:22px">
+      <button class="primary" id="btnRetry">再来一局</button>
+      <button id="btnHome">回到主页</button>
+    </div>
+    <div id="holdWrap" class="hidden">
+      <svg id="holdRing" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/><circle id="holdArc" cx="13" cy="13" r="10" fill="none" stroke="#5ef2ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="62.83" stroke-dashoffset="62.83" transform="rotate(-90 13 13)"/></svg>
+      张开手掌保持一秒，重新开始
+    </div>
+  </div>
+</section>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const easeOutBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2; };
+const hex = c => '#' + new THREE.Color(c).getHexString();
+
+const MP_VER = '0.10.14';
+const MP_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+// ---------- 调参
+const FOV = 60, TAN = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+const HAND_D = 4.5;       // 手部骨架离镜头的距离
+const GRAB_D = 11;        // 抓取物体悬停的距离
+const SPAWN_Z = -95, HIT_Z = -4;
+const SLICE_V = 1.15;     // 斩击速度阈值（屏幕短边/秒）
+const GAIN = 1.25;        // 手部活动范围放大，不用伸到画面边缘
+const MAX_HP = 5;
+
+// ---------- 渲染
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: false, powerPreference: 'high-performance' });
+const DPR = Math.min(devicePixelRatio || 1, 1.75);
+renderer.setPixelRatio(DPR);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05040d);
+scene.fog = new THREE.FogExp2(0x070516, 0.016);
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400);
+scene.add(camera);
+scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x1a0820, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(3, 5, 4); scene.add(sun);
+
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(DPR);
+composer.addPass(new RenderPass(scene, camera));
+const BLOOM = 1.1;
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), BLOOM, 0.55, 0.12);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- 环境：星空 + 隧道网格
+{
+  const n = 2400, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const pal = [new THREE.Color(0xffffff), new THREE.Color(0x9fe9ff), new THREE.Color(0xffb3ec), new THREE.Color(0xc4b5fd)];
+  const v = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    v.randomDirection().multiplyScalar(rand(120, 260));
+    pos.set([v.x, v.y, v.z], i * 3);
+    const c = pal[(Math.random() * pal.length) | 0];
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  var stars = new THREE.Points(g, new THREE.PointsMaterial({ size: .65, vertexColors: true, transparent: true, opacity: .7, fog: false, depthWrite: false }));
+  scene.add(stars);
+}
+function makeGrid(y, op) {
+  const g = new THREE.GridHelper(240, 48, 0x7a52f5, 0x7a52f5);
+  g.material.transparent = true; g.material.opacity = op; g.position.y = y;
+  scene.add(g); return g;
+}
+const floorGrid = makeGrid(-7, .8), ceilGrid = makeGrid(7, .25);
+
+// ---------- 发光贴图
+const GLOW = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.22, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+})();
+function glowSprite(color, s) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, fog: false }));
+  sp.scale.setScalar(s); sp.renderOrder = 20; return sp;
+}
+
+// ---------- 粒子系统（一个池子，GPU 画，CPU 更新）
+const MAXP = 8000;
+const pPos = new Float32Array(MAXP * 3), pCol = new Float32Array(MAXP * 3), pSize = new Float32Array(MAXP), pAlpha = new Float32Array(MAXP);
+const pVel = new Float32Array(MAXP * 3), pLife = new Float32Array(MAXP), pMax = new Float32Array(MAXP), pSize0 = new Float32Array(MAXP), pDrag = new Float32Array(MAXP);
+let pHead = 0;
+const pGeo = new THREE.BufferGeometry();
+const pAttr = {
+  position: new THREE.BufferAttribute(pPos, 3).setUsage(THREE.DynamicDrawUsage),
+  pcolor: new THREE.BufferAttribute(pCol, 3).setUsage(THREE.DynamicDrawUsage),
+  psize: new THREE.BufferAttribute(pSize, 1).setUsage(THREE.DynamicDrawUsage),
+  palpha: new THREE.BufferAttribute(pAlpha, 1).setUsage(THREE.DynamicDrawUsage),
+};
+for (const k in pAttr) pGeo.setAttribute(k, pAttr[k]);
+const pMat = new THREE.ShaderMaterial({
+  uniforms: { uScale: { value: 1 } },
+  vertexShader: `
+    attribute float psize; attribute float palpha; attribute vec3 pcolor;
+    uniform float uScale; varying vec3 vC; varying float vA;
+    void main(){ vC = pcolor; vA = palpha;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = psize * uScale / max(0.2, -mv.z);
+      gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: `
+    varying vec3 vC; varying float vA;
+    void main(){ float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
+      float a = pow(1.0 - d * 2.0, 1.6);
+      gl_FragColor = vec4(vC * (0.6 + a * 1.4), a * vA); }`,
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+});
+const particles = new THREE.Points(pGeo, pMat);
+particles.frustumCulled = false; particles.renderOrder = 5;
+scene.add(particles);
+
+function emit(x, y, z, vx, vy, vz, c, size, life, drag = 0.15) {
+  const i = pHead; pHead = (pHead + 1) % MAXP; const j = i * 3;
+  pPos[j] = x; pPos[j + 1] = y; pPos[j + 2] = z;
+  pVel[j] = vx; pVel[j + 1] = vy; pVel[j + 2] = vz;
+  pCol[j] = c.r; pCol[j + 1] = c.g; pCol[j + 2] = c.b;
+  pSize0[i] = pSize[i] = size; pLife[i] = pMax[i] = life; pAlpha[i] = 1; pDrag[i] = drag;
+}
+function updateParticles(dt) {
+  for (let i = 0; i < MAXP; i++) {
+    if (pLife[i] <= 0) continue;
+    pLife[i] -= dt;
+    if (pLife[i] <= 0) { pAlpha[i] = 0; continue; }
+    const j = i * 3, k = Math.pow(pDrag[i], dt);
+    pVel[j] *= k; pVel[j + 1] *= k; pVel[j + 2] *= k;
+    pPos[j] += pVel[j] * dt; pPos[j + 1] += pVel[j + 1] * dt; pPos[j + 2] += pVel[j + 2] * dt;
+    const f = pLife[i] / pMax[i];
+    pAlpha[i] = f; pSize[i] = pSize0[i] * (0.35 + 0.65 * f);
+  }
+  for (const k in pAttr) pAttr[k].needsUpdate = true;
+}
+
+// ---------- 坐标换算
+let W = 1, H = 1, MIN = 1;
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Color();
+// 屏幕像素 → 相机空间里距离 d 处的点
+function screenToCam(sx, sy, d, out) {
+  const nx = sx / W * 2 - 1, ny = -(sy / H * 2 - 1);
+  return out.set(nx * TAN * d * camera.aspect, ny * TAN * d, -d);
+}
+function screenToWorld(sx, sy, d, out) { return camera.localToWorld(screenToCam(sx, sy, d, out)); }
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+
+function resize() {
+  W = Math.max(1, innerWidth); H = Math.max(1, innerHeight); MIN = Math.min(W, H);
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+  renderer.setSize(W, H); composer.setSize(W, H);
+  pMat.uniforms.uScale.value = H * DPR / (2 * TAN);
+}
+addEventListener('resize', resize); resize();
+
+// ---------- 音效（全部用 WebAudio 现场合成）
+const Sfx = (() => {
+  let ac, master, noiseBuf, chOsc, chOsc2, chGain, chFilt;
+  const last = {};
+  function init() {
+    if (ac) { ac.resume(); return; }
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+    master = ac.createGain(); master.gain.value = .55;
+    const comp = ac.createDynamicsCompressor(); master.connect(comp); comp.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    chOsc = ac.createOscillator(); chOsc.type = 'sawtooth'; chOsc.frequency.value = 80;
+    chOsc2 = ac.createOscillator(); chOsc2.type = 'sine'; chOsc2.frequency.value = 160;
+    chFilt = ac.createBiquadFilter(); chFilt.type = 'lowpass'; chFilt.frequency.value = 600;
+    chGain = ac.createGain(); chGain.gain.value = 0;
+    chOsc.connect(chFilt); chOsc2.connect(chFilt); chFilt.connect(chGain); chGain.connect(master);
+    chOsc.start(); chOsc2.start();
+  }
+  const ok = (name, gap) => { if (!ac) return false; const n = ac.currentTime; if (last[name] && n - last[name] < gap) return false; last[name] = n; return true; };
+  function env(g, t0, a, peak, dec) {
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + a);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + dec);
+  }
+  function noise(dur, type, f0, f1, peak, q = 1, delay = 0) {
+    const t = ac.currentTime + delay, s = ac.createBufferSource(); s.buffer = noiseBuf;
+    const f = ac.createBiquadFilter(); f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ac.createGain(); env(g, t, .006, peak, dur);
+    s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + dur + .05);
+  }
+  function tone(type, f0, f1, dur, peak, delay = 0) {
+    const t = ac.currentTime + delay, o = ac.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ac.createGain(); env(g, t, .006, peak, dur);
+    o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+  }
+  return {
+    init,
+    slice() { if (!ok('slice', .07)) return; noise(.14, 'bandpass', 3200, 700, .5, 2); tone('triangle', 1500, 450, .09, .07); },
+    explode() { if (!ok('explode', .035)) return; noise(.42, 'lowpass', 2600, 110, .55); tone('sine', 150, 38, .36, .45); },
+    shell() { if (!ok('shell', .05)) return; tone('triangle', 1900, 1500, .16, .22); tone('sine', 2800, 2650, .25, .08); },
+    grab() { if (!ok('grab', .05)) return; tone('sine', 480, 960, .14, .25); },
+    toss() { if (!ok('toss', .05)) return; noise(.28, 'bandpass', 500, 2800, .4, 1.5); },
+    blast(c) { if (!ac) return; noise(.7 + c * .6, 'lowpass', 3200, 70, .9); tone('sine', 110, 28, .8 + c * .4, .85); tone('sawtooth', 240, 55, .4, .12 + .12 * c); },
+    hurt() { if (!ac) return; tone('square', 220, 70, .38, .22); noise(.32, 'lowpass', 900, 100, .45); },
+    nova() {
+      if (!ac) return;
+      [0, 4, 7, 12, 16].forEach((n, i) => tone('sawtooth', 220 * 2 ** (n / 12), 880 * 2 ** (n / 12), 1.3, .09, i * .035));
+      noise(2.2, 'lowpass', 7000, 50, 1.0); tone('sine', 90, 20, 1.8, .9);
+    },
+    wave() { if (!ac) return; [0, 4, 7, 12].forEach((n, i) => tone('triangle', 523 * 2 ** (n / 12), 523 * 2 ** (n / 12) * 1.01, .2, .14, i * .08)); },
+    ready() { if (!ok('ready', 1)) return; [0, 7, 12].forEach((n, i) => tone('sine', 660 * 2 ** (n / 12), 660 * 2 ** (n / 12), .25, .12, i * .06)); },
+    charge(c, on) {
+      if (!ac) return; const t = ac.currentTime;
+      chGain.gain.setTargetAtTime(on ? .05 + .12 * c : 0, t, .05);
+      chOsc.frequency.setTargetAtTime(70 + c * 240, t, .05);
+      chOsc2.frequency.setTargetAtTime(140 + c * 480, t, .05);
+      chFilt.frequency.setTargetAtTime(400 + c * 2600, t, .05);
+    },
+  };
+})();
+
+// ---------- 晶体（敌人）
+const withEdges = geo => ({ geo, edges: new THREE.EdgesGeometry(geo) });
+const TYPES = {
+  shard:    { ...withEdges(new THREE.IcosahedronGeometry(1.1, 0)),  color: 0xff2d6f, edge: 0xffa3c4, r: 1.1,  score: 100, spd: 1.1 },
+  armor:    { ...withEdges(new THREE.OctahedronGeometry(1.5, 0)),   color: 0xff8a1f, edge: 0xffdcaa, r: 1.5,  score: 250, spd: .8, shell: true },
+  splitter: { ...withEdges(new THREE.DodecahedronGeometry(1.35, 0)), color: 0x9b4dff, edge: 0xdcc2ff, r: 1.35, score: 180, spd: 1.0, split: true },
+  mini:     { ...withEdges(new THREE.TetrahedronGeometry(.85, 0)),   color: 0xff4fd8, edge: 0xffc8f2, r: .85,  score: 60,  spd: 1.3 },
+};
+const SHELL_GEO = new THREE.IcosahedronGeometry(1, 1);
+const enemies = [];
+
+function waveSpeed() { return Math.min(27, 10 + wave * 1.3); }
+function spawnEnemy(name, pos, vel) {
+  const T = TYPES[name];
+  const mat = new THREE.MeshStandardMaterial({ color: 0x15121f, emissive: T.color, emissiveIntensity: 1.4, flatShading: true, roughness: .35, metalness: .6 });
+  const mesh = new THREE.Mesh(T.geo, mat);
+  const edgeMat = new THREE.LineBasicMaterial({ color: T.edge, transparent: true, opacity: .95, blending: THREE.AdditiveBlending });
+  mesh.add(new THREE.LineSegments(T.edges, edgeMat));
+  let shell = null;
+  if (T.shell) {
+    shell = new THREE.Mesh(SHELL_GEO, new THREE.MeshBasicMaterial({ color: 0xffd166, wireframe: true, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    shell.scale.setScalar(T.r * 1.55); mesh.add(shell);
+  }
+  if (!pos) {
+    const asp = camera.aspect, th = TAN * 6, sh = TAN * -SPAWN_Z;
+    pos = new THREE.Vector3(rand(-1, 1) * sh * asp * .7, rand(-1, 1) * sh * .5, SPAWN_Z);
+    const target = new THREE.Vector3(rand(-1, 1) * th * asp * .75, rand(-1, 1) * th * .65, -6);
+    vel = target.sub(pos).normalize().multiplyScalar(waveSpeed() * T.spd);
+  }
+  mesh.position.copy(pos); mesh.scale.setScalar(.001);
+  scene.add(mesh);
+  enemies.push({
+    T, name, mesh, mat, edgeMat, shell, pos: mesh.position, vel, r: T.r,
+    state: 'alive', dead: false, age: 0, inv: 0, wob: Math.random() * 10, novaT: null,
+    spin: new THREE.Vector3(rand(-1.5, 1.5), rand(-1.5, 1.5), rand(-1, 1)),
+    sx: -999, sy: -999, sr: 0, holder: null, thrownT: 0,
+  });
+}
+
+// ---------- 游戏状态
+let state = 'menu', mode = null;
+let score = 0, best = 0, combo = 0, comboT = 0, maxCombo = 0, kills = 0, hp = MAX_HP, ult = 0;
+let wave = 0, toSpawn = 0, spawnT = 0, waveDelay = 0, shake = 0, bloomKick = 0, noHandT = 0, holdT = 0;
+const shockwaves = [], clapHist = [];
+try { best = +localStorage.getItem('arcana-best') || 0; } catch {}
+
+const comboMult = () => 1 + Math.min(3, Math.floor(combo / 5) * .5);
+
+const TIPS = {
+  camera: ['快速挥手 · 斩开晶体', '握拳蓄力 · 张开手掌释放冲击波 · 金色护盾一击即碎', '捏住晶体 · 甩出去贯穿其他晶体', '能量满时 · 双手合掌释放超新星'],
+  mouse:  ['快速划动鼠标 · 斩开晶体', '按住空格蓄力 · 松开释放冲击波 · 金色护盾一击即碎', '按住左键抓取 · 甩出去贯穿其他晶体', '能量满时 · 按 Q 释放超新星'],
+};
+function startWave(n) {
+  wave = n; toSpawn = 6 + n * 4; spawnT = .6;
+  banner(`WAVE ${n}`, TIPS[mode][n - 1] || '晶体速度提升');
+  Sfx.wave();
+}
+function pickType() {
+  const r = Math.random();
+  if (wave >= 3 && r < .22) return 'splitter';
+  if (wave >= 2 && r < (wave >= 3 ? .44 : .28)) return 'armor';
+  return 'shard';
+}
+
+// ---------- 手（摄像头最多两只，鼠标模式用 0 号）
+const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const TIP_IDX = [4, 8, 12, 16, 20];
+
+class OneEuro {
+  constructor(minCut = 1.6, beta = .012, dCut = 1) { this.minCut = minCut; this.beta = beta; this.dCut = dCut; this.reset(); }
+  reset() { this.xp = null; }
+  static a(dt, cut) { const tau = 1 / (2 * Math.PI * cut); return 1 / (1 + tau / dt); }
+  filter(x, t) {
+    if (this.xp === null) { this.xp = x; this.dxp = 0; this.tp = t; return x; }
+    const dt = Math.max(1e-3, t - this.tp); this.tp = t;
+    const dx = (x - this.xp) / dt;
+    this.dxp += OneEuro.a(dt, this.dCut) * (dx - this.dxp);
+    const cut = this.minCut + this.beta * Math.abs(this.dxp);
+    this.xp += OneEuro.a(dt, cut) * (x - this.xp);
+    return this.xp;
+  }
+}
+
+const TN = 48;
+const UP = new THREE.Vector3(0, 1, 0);
+const JOINT_GEO = new THREE.SphereGeometry(1, 12, 8), BONE_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
+const RING_GEO = new THREE.RingGeometry(.9, 1, 96);
+function makeHand(i) {
+  const color = new THREE.Color(i ? 0xff5fd8 : 0x5ef2ff);
+  const h = {
+    i, color, present: false, lastSeen: 0, hasSkeleton: false,
+    pts: Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 })),
+    fx: Array.from({ length: 21 }, () => new OneEuro()), fy: Array.from({ length: 21 }, () => new OneEuro()),
+    tip: { x: 0, y: 0 }, prevTip: { x: 0, y: 0 }, tipTime: 0, prevTime: 0, newData: false,
+    palm: { x: 0, y: 0 }, pinch: { x: 0, y: 0 }, prevPinch: { x: 0, y: 0 }, gv: { x: 0, y: 0 },
+    raw: 'none', rawCount: 0, gesture: 'none', speed: 0, slicing: false, charge: 0, grabbed: null, trail: [],
+  };
+  const jm = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.6), depthTest: false, transparent: true, fog: false });
+  const bm = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(.9), depthTest: false, transparent: true, opacity: .75, fog: false });
+  h.jointMat = jm; h.boneMat = bm;
+  h.joints = new THREE.InstancedMesh(JOINT_GEO, jm, 21); h.joints.renderOrder = 21; h.joints.frustumCulled = false;
+  h.bones = new THREE.InstancedMesh(BONE_GEO, bm, CONN.length); h.bones.renderOrder = 20; h.bones.frustumCulled = false;
+  h.skel = new THREE.Group(); h.skel.add(h.joints, h.bones); camera.add(h.skel);
+  h.tipGlow = glowSprite(color.clone().multiplyScalar(1.4), .3); camera.add(h.tipGlow);
+  h.orb = glowSprite(new THREE.Color(0xffd166).multiplyScalar(1.5), .5); camera.add(h.orb);
+  h.orbCore = glowSprite(new THREE.Color(1.6, 1.5, 1.3), .2); camera.add(h.orbCore);
+  h.cursorRing = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.5), transparent: true, opacity: .8, depthTest: false, side: THREE.DoubleSide, fog: false }));
+  h.cursorRing.renderOrder = 22; camera.add(h.cursorRing);
+  // 指尖拖尾：屏幕平面上的一条三角带
+  h.trailPos = new Float32Array(TN * 2 * 3); h.trailA = new Float32Array(TN * 2);
+  const tg = new THREE.BufferGeometry();
+  tg.setAttribute('position', new THREE.BufferAttribute(h.trailPos, 3).setUsage(THREE.DynamicDrawUsage));
+  tg.setAttribute('ta', new THREE.BufferAttribute(h.trailA, 1).setUsage(THREE.DynamicDrawUsage));
+  const idx = []; for (let k = 0; k < TN - 1; k++) { const a = 2 * k; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  tg.setIndex(idx);
+  h.trailMesh = new THREE.Mesh(tg, new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: color.clone() } },
+    vertexShader: `attribute float ta; varying float vA; void main(){ vA = ta; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform vec3 uColor; varying float vA; void main(){ gl_FragColor = vec4(uColor * (1.2 + vA * 1.5), vA); }`,
+    transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  }));
+  h.trailMesh.frustumCulled = false; h.trailMesh.renderOrder = 19; camera.add(h.trailMesh);
+  // 抓取时的念力连线
+  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  h.beam = new THREE.Line(bg, new THREE.LineBasicMaterial({ color: new THREE.Color(1.5, 1.5, 1.6), transparent: true, opacity: .8, blending: THREE.AdditiveBlending, depthTest: false, fog: false }));
+  h.beam.frustumCulled = false; h.beam.renderOrder = 18; scene.add(h.beam);
+  return h;
+}
+const hands = [makeHand(0), makeHand(1)];
+
+// 指针输入（摄像头和鼠标共用）
+function setPointer(h, tx, ty, px, py, qx, qy, t) {
+  if (!h.present) {
+    h.prevTip.x = tx; h.prevTip.y = ty; h.prevTime = t - .016;
+    h.prevPinch.x = qx; h.prevPinch.y = qy; h.gv.x = h.gv.y = 0; h.trail.length = 0;
+  } else if (!h.newData) {
+    h.prevTip.x = h.tip.x; h.prevTip.y = h.tip.y; h.prevTime = h.tipTime;
+    h.prevPinch.x = h.pinch.x; h.prevPinch.y = h.pinch.y;
+  }
+  h.tip.x = tx; h.tip.y = ty; h.tipTime = t;
+  h.palm.x = px; h.palm.y = py; h.pinch.x = qx; h.pinch.y = qy;
+  h.newData = true; h.present = true; h.lastSeen = t;
+}
+
+function setGesture(h, g) {
+  if (h.gesture === g) return;
+  const from = h.gesture; h.gesture = g;
+  if (from === 'pinch') releaseGrab(h);
+  if (from === 'fist') { if (h.charge > .12) blast(h); else h.charge = 0; }
+  if (g === 'pinch') tryGrab(h);
+  if (g === 'fist') h.charge = 0;
+}
+
+// 用 3D 世界坐标（米）判断手势，不受离镜头远近影响
+function d3(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
+function classify(w) {
+  const wr = w[0], size = d3(w[0], w[9]) || 1e-3;
+  const ext = [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tp, pp]) => d3(w[tp], wr) > d3(w[pp], wr) * 1.18);
+  const n = ext.filter(Boolean).length;
+  // 握拳：四指都弯，且食指尖缩回掌心附近（捏取时食指尖会伸在外面）
+  const palmC = { x: (w[0].x + w[9].x) / 2, y: (w[0].y + w[9].y) / 2, z: (w[0].z + w[9].z) / 2 };
+  if (n === 0 && d3(w[8], palmC) / size < .8) return 'fist';
+  if (d3(w[4], w[8]) / size < .32) return 'pinch';
+  if (n >= 3) return 'open';
+  if (ext[0]) return 'point';
+  return 'none';
+}
+
+function feedLandmarks(h, lm, wl, t) {
+  if (!h.present) for (let j = 0; j < 21; j++) { h.fx[j].reset(); h.fy[j].reset(); }
+  for (let j = 0; j < 21; j++) {
+    const x = (((1 - lm[j].x) - .5) * GAIN + .5) * W, y = ((lm[j].y - .5) * GAIN + .5) * H;
+    const p = h.pts[j]; p.x = h.fx[j].filter(x, t); p.y = h.fy[j].filter(y, t); p.z = lm[j].z;
+  }
+  const P = h.pts, palmIdx = [0, 5, 9, 13, 17];
+  let px = 0, py = 0; for (const k of palmIdx) { px += P[k].x; py += P[k].y; }
+  h.hasSkeleton = true;
+  setPointer(h, P[8].x, P[8].y, px / 5, py / 5, (P[4].x + P[8].x) / 2, (P[4].y + P[8].y) / 2, t);
+  const raw = classify(wl);
+  if (raw === h.raw) h.rawCount++; else { h.raw = raw; h.rawCount = 1; }
+  const need = (raw === 'pinch' || h.gesture === 'pinch') ? 2 : 3;
+  if (h.rawCount >= need) setGesture(h, raw);
+}
+function loseHand(h) {
+  setGesture(h, 'none');
+  h.present = false; h.raw = 'none'; h.rawCount = 0; h.charge = 0; h.trail.length = 0; h.speed = 0;
+}
+
+function ingest(res, t) {
+  const used = [false, false];
+  const n = res.landmarks ? res.landmarks.length : 0;
+  const hd = res.handedness || res.handednesses || [];
+  for (let k = 0; k < n; k++) {
+    // 输入画面没有镜像，MediaPipe 标的 Left 其实是用户的右手
+    let slot = hd[k]?.[0]?.categoryName === 'Left' ? 0 : 1;
+    if (used[slot]) slot = 1 - slot;
+    if (used[slot]) continue;
+    used[slot] = true;
+    feedLandmarks(hands[slot], res.landmarks[k], res.worldLandmarks[k], t);
+  }
+  for (let i = 0; i < 2; i++) if (!used[i] && hands[i].present && t - hands[i].lastSeen > .25) loseHand(hands[i]);
+}
+
+// ---------- 招式
+function tryGrab(h) {
+  if (state !== 'playing') return;
+  let bestE = null, bestD = Infinity;
+  for (const e of enemies) {
+    if (e.dead || e.state !== 'alive' || e.age < .2) continue;
+    const d = Math.hypot(e.sx - h.pinch.x, e.sy - h.pinch.y) - e.sr;
+    if (d < 130 && d < bestD) { bestD = d; bestE = e; }
+  }
+  if (!bestE) return;
+  bestE.state = 'grabbed'; bestE.holder = h; h.grabbed = bestE;
+  bestE.edgeMat.color.setRGB(1.6, 1.6, 1.7);
+  Sfx.grab();
+}
+function releaseGrab(h) {
+  const e = h.grabbed; if (!e) return;
+  h.grabbed = null; e.holder = null;
+  if (e.dead) return;
+  const k = 2 * TAN * GRAB_D / H * .9;
+  let vx = h.gv.x * k, vy = -h.gv.y * k; const m = Math.hypot(vx, vy);
+  if (m > 60) { vx *= 60 / m; vy *= 60 / m; }
+  e.vel.set(vx, vy, -30);
+  e.state = 'thrown'; e.thrownT = 0;
+  Sfx.toss();
+}
+function blast(h) {
+  const c = h.charge; h.charge = 0;
+  const R = (.16 + .42 * c) * MIN;
+  const ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd166).multiplyScalar(2.2), transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+  ring.renderOrder = 17; screenToCam(h.palm.x, h.palm.y, 6, ring.position); ring.scale.setScalar(.001); camera.add(ring);
+  shockwaves.push({ x: h.palm.x, y: h.palm.y, R, t: 0, dur: .42 + .22 * c, ring });
+  screenToWorld(h.palm.x, h.palm.y, 6, _w);
+  const n = 70 + 160 * c, gold = new THREE.Color(0xffd166);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = rand(8, 26) * (.5 + c);
+    _c.copy(gold).lerp(new THREE.Color(1, 1, 1), Math.random() * .6).multiplyScalar(1.6);
+    emit(_w.x, _w.y, _w.z, Math.cos(a) * s, Math.sin(a) * s, rand(-3, 3), _c, rand(.08, .2), rand(.4, .8), .08);
+  }
+  emit(_w.x, _w.y, _w.z, 0, 0, 0, new THREE.Color(2, 1.8, 1.2), 2 + 3 * c, .25, 1);
+  Sfx.blast(c); shake += .2 + .45 * c; bloomKick += .5 * c;
+}
+function supernova() {
+  if (state !== 'playing' || ult < 100) return;
+  ult = 0; Sfx.nova(); shake += 1; bloomKick += 2.6;
+  $('flash').animate([{ opacity: .9 }, { opacity: 0 }], { duration: 900, easing: 'ease-out' });
+  banner('SUPERNOVA', '');
+  const pal = [0x5ef2ff, 0xff5fd8, 0xffd166, 0xa78bfa, 0xffffff].map(c => new THREE.Color(c).multiplyScalar(1.7));
+  for (let i = 0; i < 1400; i++) {
+    _v.randomDirection(); const s = rand(15, 80);
+    emit(0, 0, -22, _v.x * s, _v.y * s, _v.z * s, pal[i % pal.length], rand(.2, .7), rand(.8, 1.8), .25);
+  }
+  for (const e of enemies) if (!e.dead) e.novaT = .1 + (-e.pos.z) / 140;
+}
+
+function explode(pos, color, kind, dir) {
+  const c = new THREE.Color(color), white = new THREE.Color(1, 1, 1);
+  const n = kind === 'nova' ? 36 : 56;
+  for (let i = 0; i < n; i++) {
+    _v.randomDirection(); const s = rand(5, 20);
+    _c.copy(c).lerp(white, Math.random() * .5).multiplyScalar(1.7);
+    emit(pos.x, pos.y, pos.z, _v.x * s, _v.y * s, _v.z * s, _c, rand(.22, .65), rand(.45, 1.1), .12);
+  }
+  if (dir) for (let i = 0; i < 26; i++) {
+    const s = rand(16, 42) * (Math.random() < .5 ? -1 : 1);
+    emit(pos.x, pos.y, pos.z, dir.x * s + rand(-2, 2), dir.y * s + rand(-2, 2), rand(-2, 2), new THREE.Color(1.8, 1.8, 1.9), rand(.12, .25), rand(.25, .45), .05);
+  }
+  emit(pos.x, pos.y, pos.z, 0, 0, 0, new THREE.Color(2, 2, 2), 4.5, .16, 1);
+  emit(pos.x, pos.y, pos.z, 0, 0, 0, c.clone().multiplyScalar(1.8), 8, .32, 1);
+}
+
+function disposeEnemy(e) {
+  scene.remove(e.mesh); e.mat.dispose(); e.edgeMat.dispose();
+  if (e.shell) e.shell.material.dispose();
+}
+function kill(e, kind, dir) {
+  if (e.dead) return;
+  e.dead = true;
+  if (e.holder) { e.holder.grabbed = null; e.holder = null; }
+  disposeEnemy(e);
+  explode(e.pos, kind === 'hurt' ? 0xff3344 : e.T.color, kind, dir);
+  if (kind === 'hurt') return;
+  combo++; comboT = 2.4; maxCombo = Math.max(maxCombo, combo); kills++;
+  const pts = Math.round(e.T.score * comboMult() * (kind === 'throw' ? 1.5 : 1));
+  score += pts;
+  if (kind !== 'nova') { const was = ult; ult = Math.min(100, ult + 3); if (was < 100 && ult >= 100) Sfx.ready(); }
+  pop(e.sx, e.sy, `+${pts}`, hex(e.T.edge));
+  Sfx.explode();
+  const cb = $('combo'); cb.classList.remove('bump'); void cb.offsetWidth; cb.classList.add('bump');
+  if (e.T.split && kind !== 'nova') {
+    for (const s of [-1, 1]) spawnEnemy('mini', e.pos.clone(), new THREE.Vector3(s * rand(4, 7), rand(-2, 2), waveSpeed() * 1.15));
+  }
+}
+function hitSlice(e, dx, dy) {
+  if (e.shell) {
+    e.mesh.remove(e.shell); e.shell.material.dispose(); e.shell = null;
+    e.inv = .35; e.pos.z -= 5;
+    const gold = new THREE.Color(0xffd166).multiplyScalar(1.8);
+    for (let i = 0; i < 40; i++) { _v.randomDirection(); const s = rand(6, 16); emit(e.pos.x, e.pos.y, e.pos.z, _v.x * s, _v.y * s, _v.z * s, gold, rand(.1, .3), rand(.3, .6), .1); }
+    pop(e.sx, e.sy, '破盾', '#ffd166'); Sfx.shell();
+    return;
+  }
+  kill(e, 'slice', { x: dx, y: -dy });
+}
+function hurtPlayer(e) {
+  kill(e, 'hurt');
+  hp--; combo = 0; shake += .6;
+  $('vignette').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 700, easing: 'ease-out' });
+  Sfx.hurt(); renderHP();
+  if (hp <= 0) gameOver();
+}
+
+// ---------- 每帧逻辑
+function updateEnemies(dt, t) {
+  for (const e of enemies) {
+    if (e.dead) continue;
+    e.age += dt; e.inv -= dt;
+    e.mesh.scale.setScalar(Math.max(.001, easeOutBack(Math.min(1, e.age / .4))));
+    e.mesh.rotation.x += e.spin.x * dt; e.mesh.rotation.y += e.spin.y * dt; e.mesh.rotation.z += e.spin.z * dt;
+    if (e.shell) { e.shell.rotation.y += dt * 1.6; e.shell.rotation.x -= dt; }
+    if (e.state === 'alive') {
+      e.pos.addScaledVector(e.vel, dt);
+      e.pos.x += Math.sin(t * 1.7 + e.wob) * .5 * dt; e.pos.y += Math.cos(t * 1.3 + e.wob) * .4 * dt;
+      const close = clamp((e.pos.z + 45) / 41, 0, 1);
+      e.mat.emissiveIntensity = 1.2 + close * (1 + Math.sin(t * 16)) * 1.1;
+      if (e.pos.z > HIT_Z) { hurtPlayer(e); if (state !== 'playing') return; continue; }
+    } else if (e.state === 'grabbed') {
+      e.mat.emissiveIntensity = 2.6 + Math.sin(t * 22) * .8;
+    } else if (e.state === 'thrown') {
+      e.thrownT += dt; e.pos.addScaledVector(e.vel, dt);
+      e.mesh.rotation.x += dt * 14; e.mesh.rotation.z += dt * 9;
+      _c.set(e.T.color).multiplyScalar(1.6);
+      for (let k = 0; k < 3; k++) emit(e.pos.x + rand(-.4, .4), e.pos.y + rand(-.4, .4), e.pos.z + rand(-.4, .4), 0, 0, 0, _c, rand(.3, .6), .35, 1);
+      for (const o of enemies) {
+        if (o === e || o.dead || o.state === 'grabbed') continue;
+        if (o.pos.distanceTo(e.pos) < o.r + e.r + .7) { kill(o, 'throw'); shake += .12; }
+      }
+      if (e.thrownT > 1.8 || e.pos.z < -125) { kill(e, 'throw'); continue; }
+    }
+    if (e.novaT !== null) { e.novaT -= dt; if (e.novaT <= 0) { kill(e, 'nova'); continue; } }
+    _v.copy(e.pos).project(camera);
+    e.sx = (_v.x * .5 + .5) * W; e.sy = (-_v.y * .5 + .5) * H;
+    const depth = Math.max(.5, camera.position.z - e.pos.z);
+    e.sr = e.r * e.mesh.scale.x / (TAN * depth) * H / 2;
+  }
+}
+
+function processHand(h, dt, t) {
+  if (!h.present) { h.slicing = false; return; }
+  if (h.newData) {
+    const dx = h.tip.x - h.prevTip.x, dy = h.tip.y - h.prevTip.y, len = Math.hypot(dx, dy);
+    const el = Math.max(1 / 120, h.tipTime - h.prevTime);
+    h.speed = len / el;
+    const gvx = (h.pinch.x - h.prevPinch.x) / el, gvy = (h.pinch.y - h.prevPinch.y) / el;
+    h.gv.x += (gvx - h.gv.x) * .5; h.gv.y += (gvy - h.gv.y) * .5;
+    h.newData = false;
+    h.slicing = h.gesture !== 'fist' && h.gesture !== 'pinch' && h.speed > SLICE_V * MIN && len > 4;
+    if (h.slicing && state === 'playing') {
+      let hit = false;
+      for (const e of enemies) {
+        if (e.dead || e.state !== 'alive' || e.inv > 0 || e.age < .2) continue;
+        if (segDist(e.sx, e.sy, h.prevTip.x, h.prevTip.y, h.tip.x, h.tip.y) < e.sr + 18) { hitSlice(e, dx / len, dy / len); hit = true; }
+      }
+      if (hit) { Sfx.slice(); shake += .05; }
+    }
+  } else {
+    h.speed *= Math.pow(.05, dt);
+    if (h.speed < SLICE_V * MIN) h.slicing = false;
+  }
+  if (h.gesture === 'fist') {
+    h.charge = Math.min(1, h.charge + dt * .85);
+    screenToWorld(h.palm.x, h.palm.y, HAND_D, _w);
+    const nPer = 1 + (h.charge * 2 | 0);
+    _c.setRGB(1.6, 1.15, .4);
+    for (let k = 0; k < nPer; k++) {
+      _v.randomDirection(); const r = rand(.45, .8);
+      emit(_w.x + _v.x * r, _w.y + _v.y * r, _w.z + _v.z * r * .3, -_v.x * r * 2.6, -_v.y * r * 2.6, -_v.z * r * .8, _c, rand(.015, .035), .36, .9);
+    }
+  }
+  if (h.grabbed) {
+    screenToWorld(h.pinch.x, h.pinch.y, GRAB_D, _w);
+    h.grabbed.pos.lerp(_w, 1 - Math.exp(-dt * 16));
+  }
+}
+
+function updateShockwaves(dt) {
+  for (let i = shockwaves.length - 1; i >= 0; i--) {
+    const s = shockwaves[i]; s.t += dt;
+    const k = Math.min(1, s.t / s.dur), r = s.R * (1 - (1 - k) ** 3);
+    s.ring.scale.setScalar(Math.max(.001, r * 2 * TAN * 6 / H));
+    s.ring.material.opacity = 1 - k;
+    if (state === 'playing') for (const e of enemies) {
+      if (e.dead || e.state !== 'alive') continue;
+      if (Math.hypot(e.sx - s.x, e.sy - s.y) < r + e.sr) kill(e, 'blast');
+    }
+    if (k >= 1) { camera.remove(s.ring); s.ring.material.dispose(); shockwaves.splice(i, 1); }
+  }
+}
+
+function checkClap(t) {
+  const a = hands[0], b = hands[1];
+  if (!(a.present && b.present)) { clapHist.length = 0; return; }
+  const d = Math.hypot(a.palm.x - b.palm.x, a.palm.y - b.palm.y) / MIN;
+  clapHist.push([t, d]);
+  while (clapHist.length && t - clapHist[0][0] > .7) clapHist.shift();
+  if (ult >= 100 && d < .2 && clapHist.some(p => p[1] > .38)) { clapHist.length = 0; supernova(); }
+}
+
+function updateGame(dt, t) {
+  if (waveDelay > 0) { waveDelay -= dt; if (waveDelay <= 0) startWave(wave + 1); }
+  else if (toSpawn > 0) {
+    spawnT -= dt;
+    if (spawnT <= 0) {
+      const burst = wave >= 4 && Math.random() < .25 ? 2 : 1;
+      for (let k = 0; k < burst && toSpawn > 0; k++) { spawnEnemy(pickType()); toSpawn--; }
+      spawnT = Math.max(.32, 1.35 - wave * .09) * rand(.6, 1.3);
+    }
+  } else if (wave > 0 && enemies.length === 0) waveDelay = 1.8;
+  comboT -= dt; if (comboT <= 0) combo = 0;
+  updateEnemies(dt, t);
+  if (state !== 'playing') return;
+  for (const h of hands) processHand(h, dt, t);
+  checkClap(t);
+  updateShockwaves(dt);
+  for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].dead) enemies.splice(i, 1);
+  const any = hands.some(h => h.present);
+  noHandT = any ? 0 : noHandT + dt;
+  $('handHint').classList.toggle('hidden', !(mode === 'camera' && noHandT > 1.2));
+}
+
+// ---------- 手部画面
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
+const jp = Array.from({ length: 21 }, () => new THREE.Vector3());
+const GOLD = new THREE.Color(0xffd166).multiplyScalar(1.8), WHITE = new THREE.Color(1.8, 1.8, 1.9);
+function updateHandVisual(h, dt, t) {
+  const vis = h.present;
+  h.skel.visible = vis && h.hasSkeleton;
+  h.tipGlow.visible = vis;
+  h.cursorRing.visible = vis && !h.hasSkeleton;
+  h.orb.visible = h.orbCore.visible = vis && h.charge > 0;
+  h.beam.visible = vis && !!h.grabbed;
+  if (!vis) { h.trailMesh.visible = false; return; }
+  const sliceF = clamp(h.speed / (SLICE_V * MIN), 0, 1.5);
+  if (h.hasSkeleton) {
+    const col = h.gesture === 'fist' ? GOLD : h.gesture === 'pinch' ? WHITE : null;
+    h.jointMat.color.copy(col || h.color).multiplyScalar(col ? 1 : 1.6);
+    for (let j = 0; j < 21; j++) {
+      const p = h.pts[j]; screenToCam(p.x, p.y, HAND_D + clamp(p.z * 8, -1.5, 1.5), jp[j]);
+      const s = TIP_IDX.includes(j) ? .055 : .038;
+      _m.compose(jp[j], _q.identity(), _s.setScalar(s)); h.joints.setMatrixAt(j, _m);
+    }
+    CONN.forEach(([a, b], k) => {
+      _v.subVectors(jp[b], jp[a]); const len = _v.length();
+      _q.setFromUnitVectors(UP, _v.normalize());
+      _w.addVectors(jp[a], jp[b]).multiplyScalar(.5);
+      _m.compose(_w, _q, _s.set(.014, len, .014)); h.bones.setMatrixAt(k, _m);
+    });
+    h.joints.instanceMatrix.needsUpdate = true; h.bones.instanceMatrix.needsUpdate = true;
+  }
+  screenToCam(h.tip.x, h.tip.y, HAND_D - .05, h.tipGlow.position);
+  h.tipGlow.scale.setScalar(.22 + sliceF * .3);
+  h.tipGlow.material.color.copy(h.color).lerp(WHITE, Math.min(1, sliceF) * .7).multiplyScalar(1.4);
+  if (!h.hasSkeleton) {
+    h.cursorRing.position.copy(h.tipGlow.position);
+    const target = h.gesture === 'pinch' ? .07 : h.gesture === 'fist' ? .05 : .11;
+    h.cursorRing.scale.setScalar(THREE.MathUtils.lerp(h.cursorRing.scale.x || .1, target, 1 - Math.exp(-dt * 18)));
+  }
+  if (h.charge > 0) {
+    screenToCam(h.palm.x, h.palm.y, HAND_D - .2, h.orb.position); h.orbCore.position.copy(h.orb.position);
+    const full = h.charge >= 1, pulse = 1 + Math.sin(t * (full ? 30 : 12)) * (full ? .12 : .05);
+    h.orb.scale.setScalar((.18 + h.charge * .5) * pulse);
+    h.orbCore.scale.setScalar((.06 + h.charge * .14) * pulse);
+    h.orb.material.color.copy(GOLD).lerp(WHITE, full ? .5 : 0);
+  }
+  if (h.grabbed) {
+    const a = h.beam.geometry.attributes.position;
+    screenToWorld(h.pinch.x, h.pinch.y, HAND_D, _w);
+    a.setXYZ(0, _w.x, _w.y, _w.z); a.setXYZ(1, h.grabbed.pos.x, h.grabbed.pos.y, h.grabbed.pos.z); a.needsUpdate = true;
+  }
+  // 拖尾
+  const tr = h.trail;
+  tr.push({ p: screenToCam(h.tip.x, h.tip.y, HAND_D - .1, new THREE.Vector3()), t });
+  while (tr.length > TN || (tr.length && t - tr[0].t > .14)) tr.shift();
+  const n = tr.length;
+  if (n < 2) { h.trailMesh.visible = false; return; }
+  h.trailMesh.visible = true;
+  const wB = .03 + .05 * Math.min(1.2, sliceF), aB = h.slicing ? 1 : .35;
+  for (let i = 0; i < n; i++) {
+    const p = tr[i].p, a = tr[Math.max(0, i - 1)].p, b = tr[Math.min(n - 1, i + 1)].p;
+    let dx = b.x - a.x, dy = b.y - a.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    const f = i / (n - 1), w = wB * f;
+    h.trailPos.set([p.x - dy * w, p.y + dx * w, p.z, p.x + dy * w, p.y - dx * w, p.z], i * 6);
+    h.trailA[2 * i] = h.trailA[2 * i + 1] = f * f * aB;
+  }
+  const g = h.trailMesh.geometry;
+  g.setDrawRange(0, (n - 1) * 6);
+  g.attributes.position.needsUpdate = true; g.attributes.ta.needsUpdate = true;
+}
+
+// ---------- HUD
+const GL = { none: ['·', '待机'], point: ['☝️', '斩击'], open: ['✋', '张开'], fist: ['✊', '蓄力'], pinch: ['🤏', '捏取'] };
+const hud = { score: -1, combo: -1, wave: -1, ult: -1, g: [null, null] };
+function renderHP() { $('hp').innerHTML = Array.from({ length: MAX_HP }, (_, i) => `<div class="pip${i < hp ? '' : ' lost'}"></div>`).join(''); }
+function updateHUD() {
+  if (hud.score !== score) { hud.score = score; $('score').textContent = score.toLocaleString(); }
+  if (hud.combo !== combo) {
+    hud.combo = combo; const cb = $('combo');
+    cb.classList.toggle('on', combo >= 2);
+    if (combo >= 2) { const m = comboMult(); cb.textContent = `COMBO ×${combo}` + (m > 1 ? `  ·  得分 ×${m}` : ''); }
+  }
+  if (hud.wave !== wave) { hud.wave = wave; $('waveLabel').textContent = wave ? `WAVE ${wave}` : 'READY'; }
+  if (hud.ult !== ult) {
+    hud.ult = ult; $('ultFill').style.width = ult + '%';
+    $('ult').classList.toggle('ready', ult >= 100);
+    $('ultHint').textContent = ult >= 100 ? (mode === 'mouse' ? '就绪 · 按 Q' : '就绪 · 双手合掌') : '击破晶体充能';
+  }
+  hands.forEach((h, i) => {
+    const el = $('g' + i);
+    if (mode === 'mouse' && i === 1) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    const g = h.present ? h.gesture : 'none', key = g + h.present;
+    if (hud.g[i] !== key) {
+      hud.g[i] = key; el.classList.toggle('on', h.present);
+      el.querySelector('.ic').textContent = GL[g][0]; el.querySelector('.lb').textContent = h.present ? GL[g][1] : (i ? '左手' : '右手');
+    }
+    el.querySelector('.chg i').style.width = (h.charge * 100) + '%';
+  });
+}
+function banner(title, sub) {
+  const b = $('banner'); b.innerHTML = `<h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}`;
+  b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+}
+function pop(x, y, text, color) {
+  if (x < 0 || y < 0 || x > W || y > H) return;
+  const d = document.createElement('div'); d.className = 'pop'; d.textContent = text;
+  d.style.left = x + 'px'; d.style.top = y + 'px'; d.style.color = color;
+  d.addEventListener('animationend', () => d.remove());
+  $('pops').appendChild(d);
+}
+
+// ---------- 流程
+function show(id, on) { $(id).classList.toggle('hidden', !on); }
+function clearField() {
+  for (const e of enemies) if (!e.dead) { e.dead = true; disposeEnemy(e); }
+  enemies.length = 0;
+  for (const s of shockwaves) { camera.remove(s.ring); s.ring.material.dispose(); }
+  shockwaves.length = 0;
+}
+function resetGame() {
+  clearField();
+  score = combo = comboT = maxCombo = kills = ult = wave = toSpawn = 0;
+  hp = MAX_HP; waveDelay = 1.6; noHandT = 0; holdT = 0;
+  for (const h of hands) { h.charge = 0; h.grabbed = null; }
+  state = 'playing';
+  show('menu', false); show('over', false); show('loading', false); show('hud', true);
+  document.body.classList.toggle('mouse-play', mode === 'mouse');
+  renderHP(); hud.wave = hud.ult = -1;
+}
+function gameOver() {
+  state = 'over';
+  for (const e of enemies) if (!e.dead) kill(e, 'hurt');
+  enemies.length = 0;
+  for (const h of hands) h.grabbed = null;
+  const isBest = score > best;
+  if (isBest) { best = score; try { localStorage.setItem('arcana-best', best); } catch {} }
+  $('sScore').textContent = score.toLocaleString(); $('sWave').textContent = wave;
+  $('sKills').textContent = kills; $('sCombo').textContent = maxCombo;
+  $('bestLine').textContent = isBest && score > 0 ? '★ 新纪录' : `最高分 ${best.toLocaleString()}`;
+  show('holdWrap', mode === 'camera');
+  document.body.classList.remove('mouse-play');
+  setTimeout(() => { if (state === 'over') show('over', true); }, 900);
+}
+function toMenu() {
+  state = 'menu'; clearField(); wave = 0;
+  show('over', false); show('hud', false); show('menu', true); show('loading', false);
+  document.body.classList.remove('mouse-play');
+}
+
+// ---------- 摄像头 + MediaPipe
+const video = $('video');
+let landmarker = null, lastVideoTime = -1;
+async function startCamera() {
+  show('menu', false); show('loading', true); show('loadErr', false); show('loadBtns', false); show('spin', true);
+  $('loadMsg').textContent = '正在请求摄像头…';
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('这个浏览器不支持摄像头接口，请用 Chrome、Edge 或 Safari 打开');
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' }, audio: false });
+    video.srcObject = stream; await video.play();
+    $('preview').style.aspectRatio = `${video.videoWidth || 4} / ${video.videoHeight || 3}`;
+    if (!landmarker) {
+      $('loadMsg').textContent = '正在加载手势识别模型（首次约 10MB）…';
+      const vision = await import(`${MP_URL}/vision_bundle.mjs`);
+      const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_URL}/wasm`);
+      const opts = d => ({ baseOptions: { modelAssetPath: MODEL_URL, delegate: d }, runningMode: 'VIDEO', numHands: 2,
+        minHandDetectionConfidence: .6, minHandPresenceConfidence: .5, minTrackingConfidence: .5 });
+      try { landmarker = await vision.HandLandmarker.createFromOptions(fileset, opts('GPU')); }
+      catch { landmarker = await vision.HandLandmarker.createFromOptions(fileset, opts('CPU')); }
+    }
+    mode = 'camera'; show('preview', true);
+    resetGame();
+  } catch (err) {
+    show('spin', false);
+    $('loadMsg').textContent = '摄像头没能启动';
+    const msg = err?.name === 'NotAllowedError' ? '摄像头权限被拒绝了。可以在地址栏左侧重新允许，然后再试一次。'
+      : err?.name === 'NotFoundError' ? '没有找到摄像头。' : (err?.message || String(err));
+    $('loadErr').textContent = msg; show('loadErr', true); show('loadBtns', true);
+  }
+}
+const pv = $('pv'), pvx = pv.getContext('2d');
+function drawPreview(res) {
+  const r = pv.getBoundingClientRect(), w = pv.width = r.width * DPR, h = pv.height = r.height * DPR;
+  pvx.clearRect(0, 0, w, h);
+  (res.landmarks || []).forEach((lm, k) => {
+    const cat = (res.handedness || res.handednesses || [])[k]?.[0]?.categoryName;
+    pvx.strokeStyle = pvx.fillStyle = cat === 'Left' ? '#5ef2ff' : '#ff5fd8';
+    pvx.lineWidth = 1.5 * DPR; pvx.beginPath();
+    for (const [a, b] of CONN) { pvx.moveTo((1 - lm[a].x) * w, lm[a].y * h); pvx.lineTo((1 - lm[b].x) * w, lm[b].y * h); }
+    pvx.stroke();
+    for (const p of lm) { pvx.beginPath(); pvx.arc((1 - p.x) * w, p.y * h, 2 * DPR, 0, 7); pvx.fill(); }
+  });
+}
+
+// ---------- 鼠标 / 键盘
+const mh = hands[0];
+const nowS = () => performance.now() / 1000;
+addEventListener('pointermove', e => { if (mode === 'mouse') setPointer(mh, e.clientX, e.clientY, e.clientX, e.clientY, e.clientX, e.clientY, nowS()); });
+addEventListener('pointerdown', e => {
+  if (mode !== 'mouse' || state !== 'playing') return;
+  setPointer(mh, e.clientX, e.clientY, e.clientX, e.clientY, e.clientX, e.clientY, nowS());
+  if (e.pointerType === 'touch') return;
+  if (e.button === 0) setGesture(mh, 'pinch');
+  else if (e.button === 2) setGesture(mh, 'fist');
+});
+addEventListener('pointerup', () => { if (mode === 'mouse' && (mh.gesture === 'pinch' || mh.gesture === 'fist')) setGesture(mh, 'point'); });
+addEventListener('contextmenu', e => { if (mode === 'mouse') e.preventDefault(); });
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); if (mode === 'mouse' && !e.repeat && mh.present) setGesture(mh, 'fist'); }
+  if (e.code === 'KeyQ') supernova();
+  if (e.code === 'KeyC' && mode === 'camera') $('preview').classList.toggle('hidden');
+});
+addEventListener('keyup', e => { if (e.code === 'Space' && mode === 'mouse' && mh.gesture === 'fist') setGesture(mh, 'point'); });
+
+$('btnCam').onclick = () => { Sfx.init(); startCamera(); };
+$('btnMouse').onclick = $('btnFallback').onclick = () => {
+  Sfx.init(); mode = 'mouse'; mh.hasSkeleton = false; mh.gesture = 'point';
+  setPointer(mh, W / 2, H / 2, W / 2, H / 2, W / 2, H / 2, nowS());
+  resetGame();
+};
+$('btnBack').onclick = toMenu;
+$('btnRetry').onclick = () => { Sfx.init(); resetGame(); };
+$('btnHome').onclick = toMenu;
+
+// ---------- 主循环
+let lastT = performance.now();
+function frame(now) { requestAnimationFrame(frame); tick(now); }
+function tick(now) {
+  const dt = clamp((now - lastT) / 1000, 0, .05); lastT = Math.max(lastT, now);
+  const t = now / 1000;
+  if (mode === 'camera' && landmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const res = landmarker.detectForVideo(video, now);
+    ingest(res, t);
+    if (!$('preview').classList.contains('hidden')) drawPreview(res);
+  }
+  if (state === 'playing') updateGame(dt, t);
+  else {
+    updateEnemies(dt, t); updateShockwaves(dt);
+    for (const h of hands) processHand(h, dt, t);
+    for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].dead) enemies.splice(i, 1);
+  }
+  if (state === 'over' && mode === 'camera') {
+    holdT = hands.some(h => h.present && h.gesture === 'open') ? holdT + dt : 0;
+    $('holdArc').style.strokeDashoffset = 62.83 * (1 - Math.min(1, holdT / 1.2));
+    if (holdT >= 1.2 && !$('over').classList.contains('hidden')) resetGame();
+  }
+  for (const h of hands) updateHandVisual(h, dt, t);
+  const charging = hands.find(h => h.present && h.gesture === 'fist');
+  Sfx.charge(charging ? charging.charge : 0, !!charging);
+
+  // 环境
+  const flow = state === 'playing' ? 6 + wave * .8 : 3;
+  floorGrid.position.z = ceilGrid.position.z = (t * flow) % 5;
+  stars.rotation.z = t * .01; stars.rotation.y = t * .004;
+  shake = Math.min(1.4, shake) * Math.pow(.015, dt);
+  camera.position.set(rand(-1, 1) * shake * .35, rand(-1, 1) * shake * .35, 0);
+  camera.rotation.z = rand(-1, 1) * shake * .015;
+  camera.updateMatrixWorld();
+  bloomKick *= Math.pow(.08, dt);
+  bloom.strength = BLOOM + bloomKick;
+  updateParticles(dt);
+  updateHUD();
+  composer.render();
+}
+renderHP();
+requestAnimationFrame(frame);
+// 调试入口：地址后加 #test 才会挂出来
+if (location.hash === '#test') window.__arcana = {
+  tick, hands, setPointer, setGesture, supernova, ingest, classify, setMode: m => { mode = m; },
+  get: () => ({ state, mode, wave, score, hp, ult, combo, kills, enemies: enemies.filter(e => !e.dead).map(e => ({ name: e.name, state: e.state, sx: e.sx | 0, sy: e.sy | 0, sr: e.sr | 0, z: e.pos.z | 0, shell: !!e.shell })) }),
+};
+</script>
+</body>
+</html>
